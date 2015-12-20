@@ -42,6 +42,10 @@ handlers:       # static then dynamic
   script: main.app
   login: admin
 
+- url: /tasks/set_memcache_notif_and_send_featured_speaker_email
+  script: main.app
+  login: admin
+
 libraries:
 
 - name: webapp2

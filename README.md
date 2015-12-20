@@ -48,9 +48,68 @@ start time (in 24 hour notation so it can be ordered).
   - createSession(SessionForm, websafeConferenceKey) -- open only to the organizer of the conference
     path: conference/{websafeConferenceKey}/createSession
 
+DESIGN:
+======
+I designed the 3 classes in models.py to implement session in conference.py
+THey are Session, SessionForm and SessionForms
+
+Session Kind:
+name - stores the name of the session
+Speaker - stores the name of the speaker of that session
+duration - stores the duration of the session in minutes
+date - stores the date in the YYYY-MM-DD format
+startTime - stores the starting time fo the session in 24 hour format
+typeOfsession - stores the type of Session (e.g. Talk, Pre-Conference, Workshop etc) (defaulted to talk if information is not given)
+highlights - stores the highlights specific to the session (defaulted to Not Available if information is not provided)
+websafeConferenceKey - stores the web safe key for the conference that it is a session of
+
+
+SessionForm  class contains all the above fields in Session plus sessionUrlSafeKey which saves the web safe
+key of the session created. This Form class is used for display purposes.
+
+
+SessionForms class contains 1 or more SessionForm so as to be able to show information about multiple sessions.
+This Form class is used for display purposes.
+
+Endpoint implementations:
+A> createSession(SessionForm, websafeConferenceKey) - This function takes a websafekey of a conference and a SessionForm and creates a session. 
+
+To implement the method, the following steps are performed:
+ - Obtained the current user information
+ - Verify the required fields are filled out (required fields are name, speaker, duration, date and startTime )
+ - Verify the OrganizerUserID matches the userID of the current user
+ - Then a session entity is created with the conference entity of which the websafeConferencekey belongs to as a Parent.
+ - The fields (name, speaker, duration, date, startTime, typeOfSession, highlights and websafeConferenceKey) are filled in and the session entity created is saved to datestore.
+ - Then the number of sessions offered by given speaker is determined. 
+ - If the number of sessions offered by that spearker is > 1, set a memcache notification for the spearker to show all the sessions being offered by the speaker and also send an email to the current user.
+  - return created entry as sessionForm
+
+B>  getConferenceSessions(websafeConferenceKey) - This function, given a conference, return all sessions
+
+To implement the method, the following steps are performed:
+  - Obtain the parent_key, a conference entity based on the web safe key conference key
+  - Query Session for all the entities with the parent_key 
+  - return results as SessionForms
+
+C>  getConferenceSessionsByType(websafeConferenceKey, typeOfSession) - This function, given a conference, return all sessions of a specified type 
+ 
+To implement the method, the following steps are performed:
+  - Obtain the parent_key, a conference entity based on the web safe key conference key
+  - Query Session for all the entities with the parent_key 
+  - Filter the query results by typeOfSession (typeOfSession is converted to lower case as that is how it is saved when the Session object is created)
+  - return results as SessionForms
+
+D> getSessionsBySpeaker(speaker) -- This function, given a speaker, return all sessions given by this particular speaker, across all conferences
+
+
+To implement the method, the following steps are performed:
+  - Query Session for all entities 
+  - Filter the query results by speaker name 
+  - return results as SessionForms
+
 
 Task 2: Add Sessions to User Wishlist
-=====================================
+=====================================g
 - Defined and implemented the following Endpoints methods
 
 - addSessionToWishlist(SessionKey) -- adds the session to the user's list of sessions they are interested in attending
@@ -64,17 +123,86 @@ path: profile/getWishList
 - deleteSessionInWishlist(SessionKey) -- removes the session from the user’s list of sessions they are interested in attending  
 path: profile/deleteSessionFromWishList
 
+DESIGN
+======
+I designed the 3 classes in models.py to implement userwishlist in conference.py
+THey are UserWishList, UserWishListForm, UserWishListForms
+
+UserWishList Kind:
+userID - ID of the user
+conferenceWsk - stores the web safe key for the conference that the session is created for
+sessionKey - stores the web safe key of the session that is added to the UserWishList
+dateAddedToWishList - date the session is added to the UserWishList
+Note: There is no condition to prevent a user from adding a session multiple times to the UserWishList.
+Only the dateAddedToWishList will be different in that case. 
+
+UserWishListForm  class contains all the above fields of UserWishList as StringFields.This Form class is used for display purposes.
+
+UserWishListForms class contains 1 or more UserWishListForm so as to be able to show information about multiple sessions in the UserWishList. This Form class is used for display purposes.
+
+Endpoint implementations:
+A> addSessionToWishlist(SessionKey) -- adds the session to the user's list of sessions they are interested in attending
+To implement the method, the following steps are performed:
+ - Obtained the current user information
+ - Verify the required fields are filled out (session Key )
+ - The validity of the sessionKey is ensured
+ - Then a userWishList entity is created with the Profile entity that matches the user as a parent.
+ - The sessionKey, websafeConferenceKey of that session, UserID and dateAddedToWishlist are filled in the entity.
+ - The entity is saved to datestore
+ - return created entry as UserWishListForm
+
+Note: In my design, user would be able to add the same session multiple times to the wish list.
+Each time will be saved with a new dateAddedToWishList.
+
+B> getSessionsInWishlist() -- query for all the sessions in a conference that the user is interested in
+
+To implement the method, the following steps are performed:
+ - Obtained the current user information
+ - Query UserWishList find all UserWishlists that have the current user's userID as UserID
+ - return the results as UserWishListForms
+
+C> deleteSessionInWishlist(SessionKey) -- removes the session from the user’s list of sessions they are interested in attending  
+
+To implement the method, the following steps are performed:
+ - Ensure the sessionKey is filled out
+ - Query UserWishList find all UserWishlists that have the sessionKey provided
+ - Delete all the userWishList entities returned in the query results
+ - return True
+
 Task 3: Work on indexes and queries
 =====================================
 Implemented 2 endpoint methods for the following queries:
 1. Query sessions of a particular Speaker that are less than a given duration
 path: sessions/getSessionsBySpeakerlessthan1hourduration
 
+DESIGN:
+======
+
+To implement the method, the following steps are performed:
+ - Ensure required fields in query form are filled out (speaker and duration)
+ - Query Session to obtain entities that have given speaker name and duration is between 0 and the given duration
+ - return the results as SessionForms
+
 2. Query sessions of a particular type on a particular date
 path: sessions/getSessionsOfATypeOnAParticularDate
 
+DESIGN:
+======
+
+To implement the method, the following steps are performed:
+ - Ensure required fields in query form are filled out (typeOfSession and date)
+ - Query Session to obtain entities that have given typeOfSession (in lower case as when the entity is created, the typeOfsession is converted to lower case) and given date
+ - return the results as SessionForms
+
 Also implemented an endpoint method for a query for all non-workshop sessions before 7 pm.
 path: sessions/getSessionsNotWorkshopsNotAfter7pm
+
+DESIGN:
+======
+
+To implement the method, the following steps are performed:
+ - Query Session to obtain entities for which typeOfSession don't match "workshop" and startime is less than "19:00" (as startTimei is saved in 24 hour format)
+ - return results as SessionForms
 
 Task 4: Add a task
 =====================================
@@ -84,6 +212,12 @@ then wrote the functionality to add a new Memcache entry that informs of the spe
 Also defined and implemented endpoint method
 - getFeaturedSpeaker()
 path: session/featuredspeaker
+
+DESIGN:
+When creating a session, after creating an entity and saving to datastore, a query is run on Session Kind to determine if there are other Session entities with the speaker name provided, if so, then using a task queue, an announcement showing the name of that speaker along with all the other sessions offerend by the speaker is written to the memcache (key is FEATURED_SPEAKER)
+
+getFeaturedSpeaker() returns the announcement saved to Memcache under the key FEATURED_SPEAKER.
+
 
 Files modified:
 app.yaml

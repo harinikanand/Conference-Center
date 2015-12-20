@@ -46,6 +46,8 @@ from models import UserWishListForms
 
 from google.appengine.api import memcache
 from google.appengine.api import taskqueue
+from google.net.proto.ProtocolBuffer import ProtocolBufferDecodeError
+
 
 from models import StringMessage
 
@@ -602,8 +604,8 @@ class ConferenceApi(remote.Service):
                     setattr(sf, field.name, str(getattr(session, field.name)))
                 else:
                     setattr(sf, field.name, getattr(session, field.name))
-            elif field.name == "conferenceWsk":
-                setattr(sf, field.name, session.conferenceWsk.urlsafe())
+            elif field.name == "sessionUrlSafeKey":
+                setattr(sf, field.name, session.key.urlsafe())
         
         sf.check_initialized()
         return sf
@@ -631,18 +633,28 @@ class ConferenceApi(remote.Service):
         if not request.startTime:
             raise endpoints.BadRequestException("Session 'startTime' field required")
 
+        # Obtain the creator of the conference provided and check against the user
+        # If the creator of the conference is not the user
+        # Return an error
+        try:
+           conference_key = ndb.Key(urlsafe=request.websafeConferenceKey)
+           conf = conference_key.get()
+        except  ProtocolBufferDecodeError:
+            raise endpoints.BadRequestException("Invalid websafeConferenceKey provided")
+
+        if conf is not None:
+           if conf.organizerUserId != getUserId(user): 
+              raise endpoints.BadRequestException("UserId does not match Conference Organizer ID, Hence cannot create session")
 
         # copy SessionForm/ProtoRPC Message into dict
         data = {field.name: getattr(request, field.name) for field in request.all_fields()}
 
-        #  delete websafeConferenceKey
-        del data['websafeConferenceKey']
   
         # add default values for those missing (both data model & outbound Message)
         for df in DEFAULTS_SESSION:
             if data[df] in (None, []):
                 data[df] = DEFAULTS_SESSION[df]
-                setattr(request, df, DEFAULTS_SESSION[df])
+
 
         # convert date and time from strings to Date objects; 
         if data['date']:
@@ -655,37 +667,26 @@ class ConferenceApi(remote.Service):
         data['typeOfSession'] = str(sessionTypeStr).lower()
 
         # generate Parent Key based on Conference WSK
-        parent_key = ndb.Key(Conference, request.websafeConferenceKey)
+        parent_key = ndb.Key(urlsafe=request.websafeConferenceKey)
         s_id = Session.allocate_ids(size=1, parent=parent_key)[0]
         s_key = ndb.Key(Session, s_id, parent=parent_key)
         data['key'] = s_key
-        data['conferenceWsk'] = request.websafeConferenceKey
+        del data['sessionUrlSafeKey']
 
         # create Session, send email to user confirming
         # creation of Session & return (modified) SessionForm
-        #logging.info(data)
+
         session = Session(**data)
         session.put()
 
         # Find if more than one session exists for a speaker
         sessions_count_by_speaker = Session.query(Session.speaker == request.speaker).count() + 1
-        #logging.info(sessions_count_by_speaker)
 
         if sessions_count_by_speaker > 1:
-            # If there is more than one session by this speaker at this conference,
-            # add a new Memcache entry that features the speaker and session names.
-            sessions = Session.query(Session.speaker == request.speaker)
-            announcement = '%s %s %s %s' % (
-                'Featured Speaker ', request.speaker,' has more than one session Please check out sessions:',
-                ', '.join(session.name for session in sessions))
-
-            # Save to memcache under the featured speaker key
-            memcache.set(MEMCACHE_FEATURED_SPEAKER_KEY, announcement)
-
-            # Add the task to send an email to user using taskqueue
             taskqueue.add(params={'email': user.email(),
-            'featured_speaker': announcement},
-            url='/tasks/send_featured_speaker_email')
+            'featured_speaker': request.speaker},
+            url='/tasks/set_memcache_notif_and_send_featured_speaker_email')
+
 
         return self._copySessionToForm(session)
 
@@ -703,7 +704,9 @@ class ConferenceApi(remote.Service):
     def getConferenceSessions(self, request):
         """Get All Conference Sessions"""
         # create ancestor query for all key matches for this conference
-        sessions = Session.query(ancestor=ndb.Key(Conference, request.websafeConferenceKey))
+        parent_key = ndb.Key(urlsafe=request.websafeConferenceKey)
+        sessions = Session.query(ancestor=parent_key)
+
 
         # return set of SessionForm objects per Session
         return SessionForms(
@@ -717,7 +720,8 @@ class ConferenceApi(remote.Service):
         """Get Conference Sessions by Type of Session"""
         # create a query to first get list of sessions of ancestor represented by conf web safe key
         # Then filter by type of Session
-        sessions = Session.query(ancestor=ndb.Key(Conference, request.websafeConferenceKey))
+        parent_key = ndb.Key(urlsafe=request.websafeConferenceKey)
+        sessions = Session.query(ancestor=parent_key)
         sessions = sessions.filter(Session.typeOfSession == request.typeOfSession.lower())
         
         # return set of SessionForm objects per Session
@@ -751,8 +755,6 @@ class ConferenceApi(remote.Service):
                     setattr(uwlf, field.name, str(getattr(userwishlist, field.name)))
                 else:
                     setattr(uwlf, field.name, getattr(userwishlist, field.name))
-            elif field.name == "conferenceWsk":
-                setattr(uwlf, field.name, userwishlist.urlsafe())
         uwlf.check_initialized()
         return uwlf
 
@@ -772,10 +774,15 @@ class ConferenceApi(remote.Service):
         # Obtain the session key
         # Then obtain the session using the session key
         # If session does not exist, return session does not exist
-        s_key = ndb.Key(urlsafe=request.sessionKey)
-        session = s_key.get()
-        if not session:
-            raise endpoints.BadRequestException("Session does not exist") 
+        try:
+           s_key = ndb.Key(urlsafe=request.sessionKey)
+           if s_key is not None:
+              session = s_key.get()
+        except ProtocolBufferDecodeError: 
+            raise endpoints.BadRequestException("Session key Invalid")
+
+        if  not session:
+            raise endpoints.BadRequestException("Session does not exist")
 
         
         # copy from user wish list from to dict
@@ -790,17 +797,12 @@ class ConferenceApi(remote.Service):
 
         # Save the key and conference web safe key
         data['key'] = userwishlist_key
-        data['conferenceWsk'] = session.conferenceWsk
-        #logging.info(data)
+        data['conferenceWsk'] = session.websafeConferenceKey
+
         # create UserWishList, send email to user confirming
         # creation of User wish list & return (modified) User wish list Form
         userwishlist = UserWishList(**data)
         userwishlist.put()
-        # TODO 2: add confirmation email sending task to queue
-        #taskqueue.add(params={'email': user.email(),
-        #   'conferenceInfo': repr(request)},
-        #    url='/tasks/send_confirmation_email'
-        #)
 
         return self._copyUserWishListToForm(userwishlist)
 
@@ -811,7 +813,7 @@ class ConferenceApi(remote.Service):
         """Add a session to the User's Wish list."""
         return self._addSessionToUserWishList(request)
 
-    @endpoints.method(USERWISHLIST_GET_REQUEST, UserWishListForms, 
+    @endpoints.method(message_types.VoidMessage, UserWishListForms, 
             path='profile/getWishList',
             http_method='POST', name='getSessionsInWishList')
     def getSessionsInWishList(self, request):
@@ -840,8 +842,6 @@ class ConferenceApi(remote.Service):
         # and delete all of them
         userwishlist_session = UserWishList.query(UserWishList.sessionKey == request.sessionKey)
         for u in userwishlist_session:
-            #logging.info(u.key)
-            # delete the userwishlist
             u.key.delete()
         retval = True
         # return deletion is sucessful
