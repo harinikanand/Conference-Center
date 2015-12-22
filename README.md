@@ -109,7 +109,7 @@ To implement the method, the following steps are performed:
 
 
 Task 2: Add Sessions to User Wishlist
-=====================================g
+=====================================
 - Defined and implemented the following Endpoints methods
 
 - addSessionToWishlist(SessionKey) -- adds the session to the user's list of sessions they are interested in attending
@@ -173,36 +173,69 @@ Task 3: Work on indexes and queries
 =====================================
 Implemented 2 endpoint methods for the following queries:
 1. Query sessions of a particular Speaker that are less than a given duration
-path: sessions/getSessionsBySpeakerlessthan1hourduration
+path: sessions/getSessionsBySpeakerlessthanequaltoduration
 
-DESIGN:
-======
+REASON FOR THE PROBLEM: The users of the conference central might be interested in conference sessions of 
+a particular speaker however may not have time to attend long sessions.
+The users may prefer short sessions. In that case, the above query helps those users to query based on 
+a particular speaker for a session duration less than or equal to the duration the user is interested in.
+
+
+IMPLEMENTED DESIGN:
+===================
 
 To implement the method, the following steps are performed:
  - Ensure required fields in query form are filled out (speaker and duration)
  - Query Session to obtain entities that have given speaker name and duration is between 0 and the given duration
  - return the results as SessionForms
 
+ALTERNATE DESIGN (PROPOSAL):
+===========================
+ - Ensure required fields in query form are filled out (speaker and duration)
+ - Query Session to obtain entities that match the speaker (q = Session.query (Session.speaker == request.speaker))
+ - Fitler the above query results for Session.duration <= request.duration (q = q.filter(Session.duration <=request.duration))
+ - return the results (q) as SessionForms
+
 2. Query sessions of a particular type on a particular date
 path: sessions/getSessionsOfATypeOnAParticularDate
 
-DESIGN:
-======
+REASON FOR THE PROBLEM: The users of the conference central might be interested in conference sessions of 
+on a particular day that are only workshops or talks or seminars etc.
+
+IMPLEMENTED DESIGN:
+===================
 
 To implement the method, the following steps are performed:
  - Ensure required fields in query form are filled out (typeOfSession and date)
  - Query Session to obtain entities that have given typeOfSession (in lower case as when the entity is created, the typeOfsession is converted to lower case) and given date
  - return the results as SessionForms
 
-Also implemented an endpoint method for a query for all non-workshop sessions before 7 pm.
+ALTERNATE DESIGN (PROPOSAL):
+===========================
+ - Ensure required fields in query form are filled out (typeOfSession and date)
+ - Query Session to obtain entities that match a particular date (q = Session.query (Session.date == datetime.strptime(request.date, "%Y-%m-%d").date()))
+ - Fitler the above query results for typeOfsession (convert the given typeOfSession to lower case)  (q = q.filter(Session.typeOfSession == request.typeOfSession.lower()))
+ - return the results q as SessionForms
+
+3. Also implemented an endpoint method for a query for all non-workshop sessions before 7 pm.
 path: sessions/getSessionsNotWorkshopsNotAfter7pm
 
-DESIGN:
-======
+REASON FOR THE PROBLEM: The users of the conference central might be interested in conference sessions that are of type non-workshop (typeOfSession) (they may only like talks, or seminars) and those that do not start after 7pm (start time is saved in startTime)
+ 
+IMPLEMENTED DESIGN:
+===================
 
 To implement the method, the following steps are performed:
  - Query Session to obtain entities for which typeOfSession don't match "workshop" and startime is less than "19:00" (as startTimei is saved in 24 hour format)
  - return results as SessionForms
+
+ALTERNATE DESIGN (PROPOSAL):
+===========================
+- Query Session to obtain all sessions that are not workshop (meaning typeOfsession is not workshop)
+  (q = Session.query(Session.typeOfSession == "workshop") as typeOfSession is always saved in lower case
+- Filter the above results to check the startTime is less than 19.30 as time is saved in 24 hour format
+  (q = Session.filter(Session.startTime < datetime.strptime("19:00", "%H:%M").time()) 
+- return the query results as SessionForms
 
 Task 4: Add a task
 =====================================

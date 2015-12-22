@@ -644,7 +644,7 @@ class ConferenceApi(remote.Service):
 
         if conf is not None:
            if conf.organizerUserId != getUserId(user): 
-              raise endpoints.BadRequestException("UserId does not match Conference Organizer ID, Hence cannot create session")
+              raise endpoints.BadRequestException("UserId does not match Conference Organizer ID")
 
         # copy SessionForm/ProtoRPC Message into dict
         data = {field.name: getattr(request, field.name) for field in request.all_fields()}
@@ -700,7 +700,7 @@ class ConferenceApi(remote.Service):
 
     @endpoints.method(SESSION_GET_REQUEST, SessionForms, 
             path='conference/{websafeConferenceKey}/getConferenceSessions',
-            http_method='POST', name='getConferenceSessions')
+            http_method='GET', name='getConferenceSessions')
     def getConferenceSessions(self, request):
         """Get All Conference Sessions"""
         # create ancestor query for all key matches for this conference
@@ -715,7 +715,7 @@ class ConferenceApi(remote.Service):
 
     @endpoints.method(SESSION_GET_REQUEST, SessionForms, 
             path='conference/{websafeConferenceKey}/getConferenceSessionsByType/{typeOfSession}',
-            http_method='POST', name='getConferenceSessionsByType')
+            http_method='GET', name='getConferenceSessionsByType')
     def getConferenceSessionsByType(self, request):
         """Get Conference Sessions by Type of Session"""
         # create a query to first get list of sessions of ancestor represented by conf web safe key
@@ -731,7 +731,7 @@ class ConferenceApi(remote.Service):
 
     @endpoints.method(SESSION_GET_REQUEST, SessionForms, 
             path='conference/{speaker}',
-            http_method='POST', name='getSessionsBySpeaker')
+            http_method='GET', name='getSessionsBySpeaker')
     def getSessionsBySpeaker(self, request):
         """Get All Conference Sessions of a particular speaker"""
 
@@ -815,7 +815,7 @@ class ConferenceApi(remote.Service):
 
     @endpoints.method(message_types.VoidMessage, UserWishListForms, 
             path='profile/getWishList',
-            http_method='POST', name='getSessionsInWishList')
+            http_method='GET', name='getSessionsInWishList')
     def getSessionsInWishList(self, request):
         """Get all sessions of a user"""
         # Obtain user information and check user is logged in
@@ -850,10 +850,10 @@ class ConferenceApi(remote.Service):
 # - - - Task 3:  Indexes and 2 Queries - - - - - - - - - - - - - - - - -  
 
     @endpoints.method(SESSIONS_QUERY_ONE_GET_REQUEST, SessionForms,
-    	              path='sessions/getSessionsBySpeakerlessthanduration',
+    	              path='sessions/getSessionsBySpeakerlessthanequaltoduration',
                       http_method='GET',
-                      name='getSessionsBySpeakerlessthanduration')
-    def getSessionsBySpeakerlessthanduration(self, request):
+                      name='getSessionsBySpeakerlessthanequaltoduration')
+    def getSessionsBySpeakerlessthanequaltoduration(self, request):
         """Return sessions of a particular Speaker that are less than duration given"""
 
         # check all required fields are provided
@@ -865,7 +865,7 @@ class ConferenceApi(remote.Service):
         # Query Session Kind to obtain matches for given speaker and duration in the value provided
         sessions = Session.query(ndb.AND(Session.speaker == request.speaker,
         	                             Session.duration > 0,
-        	                             Session.duration < int(request.duration)))
+        	                             Session.duration <= int(request.duration)))
 
         return SessionForms(items=[self._copySessionToForm(session) for session in sessions])
 
