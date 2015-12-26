@@ -172,7 +172,8 @@ To implement the method, the following steps are performed:
 Task 3: Work on indexes and queries
 =====================================
 Implemented 2 endpoint methods for the following queries:
-1. Query sessions of a particular Speaker that are less than a given duration
+A. Query sessions of a particular Speaker that are less than a given duration
+==============================================================================
 path: sessions/getSessionsBySpeakerlessthanequaltoduration
 
 PURPOSE: The users of the conference central might be interested in conference sessions of 
@@ -196,7 +197,8 @@ ALTERNATE DESIGN (PROPOSAL NOT IMPLEMENTED):
  - Fitler the above query results for Session.duration <= request.duration (q = q.filter(Session.duration <=request.duration))
  - return the results (q) as SessionForms
 
-2. Query sessions of a particular type on a particular date
+B. Query sessions of a particular type on a particular date
+==============================================================
 path: sessions/getSessionsOfATypeOnAParticularDate
 
 PURPOSE: The users of the conference central might be interested in conference sessions of 
@@ -217,10 +219,13 @@ ALTERNATE DESIGN (PROPOSAL NOT IMPLEMENTED):
  - Fitler the above query results for typeOfsession (convert the given typeOfSession to lower case)  (q = q.filter(Session.typeOfSession == request.typeOfSession.lower()))
  - return the results q as SessionForms
 
-3. Also implemented an endpoint method for a query for all non-workshop sessions before 7 pm.
+C. Also implemented an endpoint method for a query for all non-workshop sessions before 7 pm.
+=============================================================================================
 path: sessions/getSessionsNotWorkshopsNotAfter7pm
 
-DATASTORE QUERY LIMITATION: THis query requires 2 inequalities and that results in the below datastore query error:
+DATASTORE QUERY LIMITATION: 
+==========================
+This query requires 2 inequalities and that results in the below datastore query error:
 BadRequestError: Only one inequality filter per query is supported. Encountered both typeOfSession and startTime
 
  
